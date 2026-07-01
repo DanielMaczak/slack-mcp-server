@@ -1,25 +1,37 @@
 services:
   mcp-server:
-    image: ghcr.io/korotovsky/slack-mcp-server:latest
+    image: slack-mcp-server:mbi   # local build w/ conversations_thread_unreads patch (fork: DanielMaczak/slack-mcp-server)
+    container_name: slack-mcp-server
+    # Auto-start on system boot: the Docker daemon is systemd-enabled, so an
+    # `unless-stopped` container resumes whenever the daemon starts on WSL boot.
     restart: unless-stopped
-    networks:
-      - app-tier
+    # Bind to localhost only. This endpoint grants full Slack access via the
+    # session token, so it must not be reachable from the LAN/Windows network.
     ports:
-      - "3001:3001"
-    volumes:
-      - users_cache:/app/mcp-server/.users_cache.json
-      - channels_cache:/app/mcp-server/.channels_cache.json
+      - "127.0.0.1:9001:3001"
+    # Explicit public resolvers. The embedded Docker DNS (127.0.0.11) was
+    # intermittently failing to resolve slack.com on WSL2 ("server misbehaving"),
+    # which crashed auth.test on restart (Exit 1). Pinning resolvers fixes it.
+    dns:
+      - "1.1.1.1"
+      - "8.8.8.8"
     env_file:
       - .env
     environment:
+      # SSE transport (Dockerfile default CMD is `--transport sse`) on :3001/sse.
       SLACK_MCP_HOST: "0.0.0.0"
       SLACK_MCP_PORT: "3001"
+      # Enable user-message posting (cockpit sends). The cockpit's own
+      # write-gate still requires Daniel's approval for every actual send.
+      SLACK_MCP_ADD_MESSAGE_TOOL: "true"
+      # Enable conversations_mark (mark-read). Disabled by default in the image;
+      # the cockpit uses it for the "unread = still needs Daniel" invariant
+      # (/sync marks FYI read; /cockpit marks cards read on Sent/Skip).
+      SLACK_MCP_MARK_TOOL: "true"
+    # Persist the users/channels caches across restarts (avoids a full refetch
+    # on every boot). Default cache dir inside the container is /root/.cache/...
+    volumes:
+      - slack_mcp_cache:/root/.cache/slack-mcp-server
 
 volumes:
-  users_cache:
-  channels_cache:
-
-networks:
-  app-tier:
-    name: app-tier
-    external: true
+  slack_mcp_cache:
