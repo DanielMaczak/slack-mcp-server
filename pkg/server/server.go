@@ -33,6 +33,7 @@ const (
 	ToolAttachmentGetData           = "attachment_get_data"
 	ToolConversationsSearchMessages = "conversations_search_messages"
 	ToolConversationsUnreads        = "conversations_unreads"
+	ToolConversationsThreadUnreads  = "conversations_thread_unreads"
 	ToolConversationsMark           = "conversations_mark"
 	ToolConversationsLeave          = "conversations_leave"
 	ToolConversationsJoin           = "conversations_join"
@@ -58,6 +59,7 @@ var ValidToolNames = []string{
 	ToolAttachmentGetData,
 	ToolConversationsSearchMessages,
 	ToolConversationsUnreads,
+	ToolConversationsThreadUnreads,
 	ToolConversationsMark,
 	ToolConversationsLeave,
 	ToolConversationsJoin,
@@ -347,6 +349,20 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				mcp.DefaultBool(false),
 			),
 		), conversationsHandler.ConversationsUnreadsHandler)
+	}
+
+	// Register thread-unreads tool - surfaces unread THREAD activity (replies +
+	// thread mentions) that the channel-level unread feed (client.counts) misses.
+	if !provider.IsBotToken() && shouldAddTool(ToolConversationsThreadUnreads, enabledTools, "") {
+		s.AddTool(mcp.NewTool(ToolConversationsThreadUnreads,
+			mcp.WithDescription("List unread THREAD activity — replies and mentions in threads you follow that the channel-level unread feed (conversations_unreads) does not show. Read-only."),
+			mcp.WithTitleAnnotation("Get Unread Thread Replies"),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithNumber("limit",
+				mcp.Description("Max threads to scan"),
+				mcp.DefaultNumber(50),
+			),
+		), conversationsHandler.ConversationsThreadUnreadsHandler)
 	}
 
 	// Register mark tool - marks a channel as read

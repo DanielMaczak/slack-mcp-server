@@ -246,6 +246,7 @@ type SlackAPI interface {
 	ClientUserBoot(ctx context.Context) (*edge.ClientUserBootResponse, error)
 	UsersSearch(ctx context.Context, query string, count int) ([]slack.User, error)
 	ClientCounts(ctx context.Context) (edge.ClientCountsResponse, error)
+	SubscriptionsThreadGetView(ctx context.Context, currentTs string, limit int) (edge.SubscriptionsThreadViewResponse, error)
 	GetMutedChannels(ctx context.Context) (map[string]bool, error)
 	SavedList(ctx context.Context, filter string, limit int, cursor string) (edge.SavedListResponse, error)
 	SavedUpdate(ctx context.Context, itemType, itemID, ts, mark string, dateDue int64) error
@@ -563,6 +564,10 @@ func (c *MCPSlackClient) UsersSearch(ctx context.Context, query string, count in
 
 func (c *MCPSlackClient) ClientCounts(ctx context.Context) (edge.ClientCountsResponse, error) {
 	return c.edgeClient.ClientCounts(ctx)
+}
+
+func (c *MCPSlackClient) SubscriptionsThreadGetView(ctx context.Context, currentTs string, limit int) (edge.SubscriptionsThreadViewResponse, error) {
+	return c.edgeClient.SubscriptionsThreadGetView(ctx, currentTs, limit)
 }
 
 func (c *MCPSlackClient) GetMutedChannels(ctx context.Context) (map[string]bool, error) {

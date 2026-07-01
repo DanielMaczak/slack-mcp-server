@@ -61,6 +61,67 @@ func (cl *Client) ClientCounts(ctx context.Context) (ClientCountsResponse, error
 	return r, nil
 }
 
+// subscriptions.* API
+
+type subscriptionsThreadGetViewForm struct {
+	BaseRequest
+	CurrentTs    string `json:"current_ts"`
+	Limit        int    `json:"limit"`
+	OrgWideAware bool   `json:"org_wide_aware"`
+	WebClientFields
+}
+
+type ThreadViewMessage struct {
+	User     string `json:"user"`
+	Ts       string `json:"ts"`
+	Text     string `json:"text"`
+	ThreadTs string `json:"thread_ts"`
+	Channel  string `json:"channel"`
+}
+
+type ThreadView struct {
+	RootMsg       ThreadViewMessage   `json:"root_msg"`
+	UnreadReplies []ThreadViewMessage `json:"unread_replies"`
+	LatestReplies []ThreadViewMessage `json:"latest_replies"`
+}
+
+type SubscriptionsThreadViewResponse struct {
+	baseResponse
+	Threads            []ThreadView `json:"threads"`
+	TotalUnreadReplies int          `json:"total_unread_replies"`
+	NewThreadsCount    int          `json:"new_threads_count"`
+	HasMore            bool         `json:"has_more"`
+	MaxTs              string       `json:"max_ts"`
+}
+
+// SubscriptionsThreadGetView returns the "Threads" view: subscribed threads with
+// unread replies — the Activity feed that channel-level client.counts omits.
+func (cl *Client) SubscriptionsThreadGetView(ctx context.Context, currentTs string, limit int) (SubscriptionsThreadViewResponse, error) {
+	ctx, task := trace.NewTask(ctx, "SubscriptionsThreadGetView")
+	defer task.End()
+
+	form := subscriptionsThreadGetViewForm{
+		BaseRequest:     BaseRequest{Token: cl.token},
+		CurrentTs:       currentTs,
+		Limit:           limit,
+		OrgWideAware:    true,
+		WebClientFields: webclientReason("fetch-threads-view-counts/fetchThreadsViewCounts"),
+	}
+
+	resp, err := cl.PostForm(ctx, "subscriptions.thread.getView", values(form, true))
+	if err != nil {
+		return SubscriptionsThreadViewResponse{}, err
+	}
+	r := SubscriptionsThreadViewResponse{}
+	if err := cl.ParseResponse(&r, resp); err != nil {
+		return SubscriptionsThreadViewResponse{}, err
+	}
+	if err := r.validate("subscriptions.thread.getView"); err != nil {
+		return SubscriptionsThreadViewResponse{}, err
+	}
+	return r, nil
+}
+
 type clientDMsForm struct {
 	BaseRequest
 	Count          int    `json:"count"`

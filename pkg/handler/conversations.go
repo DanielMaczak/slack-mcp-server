@@ -1339,6 +1339,62 @@ func (ch *ConversationsHandler) getChannelDisplayName(info *slack.Channel, chann
 	}
 }
 
+// ConversationsThreadUnreadsHandler returns unread thread replies across all
+// threads the user follows. This surfaces thread activity (replies + thread
+// mentions) that the channel-level unread feed (client.counts) misses, by
+// wrapping the Edge subscriptions.thread.getView method.
+func (ch *ConversationsHandler) ConversationsThreadUnreadsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsThreadUnreadsHandler called", zap.Any("params", request.Params))
+
+	limit := request.GetInt("limit", 50)
+	currentTs := fmt.Sprintf("%d.000000", time.Now().Unix())
+
+	view, err := ch.apiProvider.Slack().SubscriptionsThreadGetView(ctx, currentTs, limit)
+	if err != nil {
+		ch.logger.Error("SubscriptionsThreadGetView failed", zap.Error(err))
+		return nil, fmt.Errorf("failed to get unread thread replies: %v", err)
+	}
+
+	ch.logger.Debug("Got thread view",
+		zap.Int("threads", len(view.Threads)),
+		zap.Int("total_unread_replies", view.TotalUnreadReplies),
+		zap.Int("new_threads_count", view.NewThreadsCount))
+
+	// Flatten each thread's unread replies into one Message row per reply.
+	// The reply objects carry no channel field, so the channel comes from the
+	// parent thread's root_msg.channel; ThreadTs is the root message ts.
+	var messages []Message
+	for _, thread := range view.Threads {
+		channel := thread.RootMsg.Channel
+		rootTs := thread.RootMsg.Ts
+		for _, reply := range thread.UnreadReplies {
+			timestamp, err := text.TimestampToIsoRFC3339(reply.Ts)
+			if err != nil {
+				ch.logger.Debug("Failed to convert thread reply timestamp to RFC3339",
+					zap.String("ts", reply.Ts), zap.Error(err))
+				timestamp = reply.Ts
+			}
+
+			messages = append(messages, Message{
+				MsgID:    reply.Ts,
+				UserID:   reply.User,
+				UserName: reply.User,
+				RealName: reply.User,
+				Channel:  channel,
+				ThreadTs: rootTs,
+				Text:     text.ProcessText(reply.Text),
+				Time:     timestamp,
+			})
+		}
+	}
+
+	if len(messages) == 0 {
+		return mcp.NewToolResultText("No unread thread replies."), nil
+	}
+
+	return marshalMessagesToCSV(messages)
+}
+
 // ConversationsMarkHandler marks a channel as read up to a specific timestamp
 func (ch *ConversationsHandler) ConversationsMarkHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ConversationsMarkHandler called", zap.Any("params", request.Params))
